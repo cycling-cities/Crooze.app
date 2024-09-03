@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphQL to CSV Data</title>
+    <!-- Include jQuery from a CDN -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <pre id="csvOutput"></pre>
+    <script>
+        $(document).ready(function() {
+            // Function to get query parameters from URL
+            function getQueryParam(param) {
+                const urlParams = new URLSearchParams(window.location.search);
+                return urlParams.get(param);
+            }
+
+            // Get 'date' and 'challengeId' from the URL query parameters
+            const dateParam = getQueryParam('date');
+            const challengeIdParam = getQueryParam('challengeId');
+
+            // Format the date in ISO 8601 format if not already formatted
+            const formattedDate = new Date(dateParam).toISOString();
+            console.log('Formatted Date:', formattedDate);
+
+            // Check if the required query parameters are present
+            if (!dateParam || !challengeIdParam) {
+                $('#csvData').html('Missing required query parameters: date and/or challengeId.');
+                return;
+            }
+
+            // Define the GraphQL query
+            const query = `
+                query Export_challenge_data($date: datetime, $challengeId: String) {
+                    challenge {
+                        export_challenge_data(date: $date, challenge_id: $challengeId) 
+                    }
+                }`;
+
+            // Send the POST request using jQuery to call the GraphQL API
+            $.ajax({
+                url: 'https://api.crooze.app', // Replace with your GraphQL endpoint
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        query: query,
+                        variables: {
+                            date: formattedDate,
+                            challengeId: challengeIdParam
+                        }
+                    }),
+                    success: function(response) {
+                    console.log(response);
+                    if (response.data && response.data.challenge && response.data.challenge.export_challenge_data.csv_format.result) {
+                        const csvUrl = response.data.challenge.export_challenge_data.csv_format.result;
+                        console.log('CSV URL:', csvUrl);
+                        const csvData = jsonArrayToCsv(csvUrl);
+                        // Display the CSV data
+                        $('#csvOutput').text(csvData);
+                        // Fetch the CSV data from the CSV URL
+                        //fetchCsvData(csvUrl);
+                    } else {
+                        $('#csvData').html('CSV URL not found in the response.');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error fetching GraphQL data:', error);
+                    $('#csvData').html('Error fetching GraphQL data: ' + error);
+                }
+            });
+
+
+            function jsonArrayToCsv(jsonArray) {
+                if (jsonArray.length === 0) return '';
+
+                // Extract headers
+                const headers = Object.keys(jsonArray[0]);
+                
+                // Extract rows
+                const rows = jsonArray.map(obj => 
+                    headers.map(header => {
+                        const value = obj[header] === null ? '' : obj[header];
+                        return `"${String(value).replace(/"/g, '""')}"`; // Handle commas and quotes
+                    }).join(',')
+                );
+                
+                // Combine headers and rows
+                const csvContent = headers.join(',') + '\n' + rows.join('\n');
+                
+                return csvContent;
+            }
+
+            // Uncomment the line below to enable CSV download
+            // downloadCsv(csvData, 'data.csv');
+        
+            // Function to fetch the CSV data from the CSV URL
+            function fetchCsvData(csvUrl) {
+                $.ajax({
+                    url: csvUrl,
+                    method: 'GET',
+                    success: function(data) {
+                        console.log('CSV Data:', data);
+                        $('#csvData').text(data); // Display the CSV data
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error loading CSV:', error);
+                        $('#csvData').text('Error loading CSV data: ' + error);
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
